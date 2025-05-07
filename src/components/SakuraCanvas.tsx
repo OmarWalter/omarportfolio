@@ -13,11 +13,8 @@ import {
 } from '@/lib/shaders';
 import { animate, makeCanvasFullScreen, setViewports } from '@/lib/sakura';
 
-interface SakuraCanvasProps {
-  className?: string;
-}
 // This component is a WebGL canvas that renders a sakura animation.
-const SakuraCanvas: React.FC<SakuraCanvasProps> = ({className}) => {
+const SakuraCanvas: React.FC<> = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [webGLError, setWebGLError] = useState<string | null>(null);
 

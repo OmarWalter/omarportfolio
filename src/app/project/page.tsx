@@ -10,16 +10,16 @@ import React, { useEffect, useState } from "react";
 export default function Project() {
   const [isLoading, setIsLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
-  const [words, setWords] = useState([
+
+  const words = [
     "Man's dearest possession is life.",
     "Live it so as to feel no torturing regrets for wasted years.",
     "Never know the burning shame of a mean and petty past.",
     "All my life, all my strength were given to the finest cause",
     "the fight for the Liberation of Mankind.",
-  ]);
+  ];
 
   useEffect(() => {
-    // Simulate asset loading or data fetching
     const timer = setTimeout(() => {
       setIsLoading(false);
     }, 4000);

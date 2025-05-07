@@ -6,7 +6,7 @@ interface Vector3 {
     array?: Float32Array;
   }
   
-  interface Matrix44 extends Float32Array {}
+  type Matrix44 = Float32Array;
   
   const Vector3 = {
     create: (x: number, y: number, z: number): Vector3 => ({ x, y, z }),
@@ -93,8 +93,8 @@ interface Vector3 {
     wHalfRT0?: RenderTarget;
     wHalfRT1?: RenderTarget;
     setSize: (w: number, h: number) => void;
+    [key: string]: RenderTarget | undefined | ((w: number, h: number) => void); // Allow dynamic RenderTarget properties
   }
-  
   const renderSpec: RenderSpec = {
     width: 0,
     height: 0,
@@ -135,7 +135,7 @@ interface Vector3 {
     attributes: { [key: string]: number };
   }
   
-  interface BlossomParticle {
+  interface IBlossomParticle {
     velocity: number[];
     rotation: number[];
     position: number[];
@@ -148,15 +148,15 @@ interface Vector3 {
     setPosition: (nx: number, ny: number, nz: number) => void;
     setEulerAngles: (rx: number, ry: number, rz: number) => void;
     setSize: (s: number) => void;
-    update: (dt: number, et: number) => void;
+    update: (dt: number) => void;
   }
   
   interface PointFlower {
-    program?: ShaderProgram; // Updated to use ShaderProgram
+    program?: ShaderProgram;
     offset?: Float32Array;
     fader?: Vector3;
     numFlowers?: number;
-    particles?: BlossomParticle[];
+    particles?: IBlossomParticle[]; // Changed from BlossomParticle
     dataArray?: Float32Array;
     positionArrayOffset?: number;
     eulerArrayOffset?: number;
@@ -164,7 +164,6 @@ interface Vector3 {
     buffer?: WebGLBuffer;
     area?: Vector3;
   }
-  
   // WebGL Functions
   const deleteRenderTarget = (gl: WebGLRenderingContext, rt: RenderTarget): void => {
     gl.deleteFramebuffer(rt.frameBuffer);
@@ -263,7 +262,7 @@ interface Vector3 {
     return shaderProgram;
   };
   
-  const useShader = (gl: WebGLRenderingContext, prog: ShaderProgram): void => {
+  const activateShader = (gl: WebGLRenderingContext, prog: ShaderProgram): void => {
     if (!prog || !prog.program) {
       console.error('Cannot use shader: program is null or invalid');
       return;
@@ -274,8 +273,8 @@ interface Vector3 {
     });
   };
   
-  // Update unuseShader accordingly
-  const unuseShader = (gl: WebGLRenderingContext, prog: ShaderProgram): void => {
+  // Update deactivateShader accordingly
+  const deactivateShader = (gl: WebGLRenderingContext, prog: ShaderProgram): void => {
     if (!prog || !prog.program) {
       console.error('Cannot unuse shader: program is null or invalid');
       return;
@@ -305,7 +304,7 @@ interface Vector3 {
   const pointFlower: PointFlower = {};
   let sceneStandBy = false;
   
-  class BlossomParticle implements BlossomParticle {
+  class BlossomParticle implements IBlossomParticle {
     velocity: number[] = new Array(3);
     rotation: number[] = new Array(3);
     position: number[] = new Array(3);
@@ -342,7 +341,7 @@ interface Vector3 {
       this.size = s;
     }
   
-    update(dt: number, et: number): void {
+    update(dt: number): void {
       this.position[0] += this.velocity[0] * dt;
       this.position[1] += this.velocity[1] * dt;
       this.position[2] += this.velocity[2] * dt;
@@ -369,7 +368,7 @@ interface Vector3 {
       return;
     }
   
-    useShader(gl, pointFlower.program);
+    activateShader(gl, pointFlower.program);
     pointFlower.offset = new Float32Array([0.0, 0.0, 0.0]);
     pointFlower.fader = Vector3.create(0.0, 10.0, 0.0);
     pointFlower.numFlowers = 1600;
@@ -382,7 +381,7 @@ interface Vector3 {
     gl.bindBuffer(gl.ARRAY_BUFFER, pointFlower.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, pointFlower.dataArray, gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    unuseShader(gl, pointFlower.program);
+    deactivateShader(gl, pointFlower.program);
   
     for (let i = 0; i < pointFlower.numFlowers; i++) {
       pointFlower.particles[i] = new BlossomParticle();
@@ -419,19 +418,18 @@ interface Vector3 {
   
   const renderPointFlowers = (gl: WebGLRenderingContext): void => {
     const PI2 = Math.PI * 2.0;
-    const limit = [pointFlower.area!.x, pointFlower.area!.y, pointFlower.area!.z];
-    const repeatPos = (prt: BlossomParticle, cmp: number, limit: number): void => {
+    const repeatPos = (prt: IBlossomParticle, cmp: number, limit: number): void => {
       if (Math.abs(prt.position[cmp]) - prt.size * 0.5 > limit) {
         prt.position[cmp] += prt.position[cmp] > 0 ? -limit * 2.0 : limit * 2.0;
       }
     };
-    const repeatEuler = (prt: BlossomParticle, cmp: number): void => {
+    const repeatEuler = (prt: IBlossomParticle, cmp: number): void => {
       prt.euler[cmp] = prt.euler[cmp] % PI2;
       if (prt.euler[cmp] < 0.0) prt.euler[cmp] += PI2;
     };
     for (let i = 0; i < pointFlower.numFlowers!; i++) {
       const prtcl = pointFlower.particles![i];
-      prtcl.update(timeInfo.delta, timeInfo.elapsed);
+      prtcl.update(timeInfo.delta);
       repeatPos(prtcl, 0, pointFlower.area!.x);
       repeatPos(prtcl, 1, pointFlower.area!.y);
       repeatPos(prtcl, 2, pointFlower.area!.z);
@@ -466,7 +464,7 @@ interface Vector3 {
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     const prog = pointFlower.program!;
-    useShader(gl, prog);
+    activateShader(gl, prog);
     gl.uniformMatrix4fv(prog.uniforms.uProjection, false, projection.matrix);
     gl.uniformMatrix4fv(prog.uniforms.uModelview, false, camera.matrix);
     gl.uniform3fv(prog.uniforms.uResolution, renderSpec.array);
@@ -527,7 +525,7 @@ interface Vector3 {
     gl.uniform3fv(prog.uniforms.uOffset, pointFlower.offset!);
     gl.drawArrays(gl.POINTS, 0, pointFlower.numFlowers!);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    unuseShader(gl, prog);
+    deactivateShader(gl, prog);
     gl.enable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
   };
@@ -566,17 +564,17 @@ interface Vector3 {
       dataArray: new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]),
       buffer: gl.createBuffer()!,
     };
-    useShader(gl, ret.program);
+    activateShader(gl, ret.program);
     gl.bindBuffer(gl.ARRAY_BUFFER, ret.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, ret.dataArray, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, null);
-    unuseShader(gl, ret.program);
+    deactivateShader(gl, ret.program);
     return ret;
   };
   
-  const useEffect = (gl: WebGLRenderingContext, fxobj: Effect, srctex: RenderTarget | null): void => {
+  const activateEffect = (gl: WebGLRenderingContext, fxobj: Effect, srctex: RenderTarget | null): void => {
     const prog = fxobj.program;
-    useShader(gl, prog);
+    activateShader(gl, prog);
     gl.uniform3fv(prog.uniforms.uResolution, renderSpec.array);
     if (srctex) {
       gl.uniform2fv(prog.uniforms.uDelta, srctex.dtxArray);
@@ -592,8 +590,8 @@ interface Vector3 {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   };
   
-  const unuseEffect = (gl: WebGLRenderingContext, fxobj: Effect): void => {
-    unuseShader(gl, fxobj.program);
+  const deactivateEffect = (gl: WebGLRenderingContext, fxobj: Effect): void => {
+    deactivateShader(gl, fxobj.program);
   };
   const createEffectLib = (
     gl: WebGLRenderingContext,
@@ -628,12 +626,12 @@ interface Vector3 {
       return;
     }
   };
-  const renderBackground = (gl, elapsed, delta) => {
+  const renderBackground = (gl: WebGLRenderingContext, elapsed: number, delta: number): void => {
     gl.disable(gl.DEPTH_TEST);
-    useEffect(gl, effectLib.sceneBg, null);
-    gl.uniform2f(effectLib.sceneBg.program.uniforms.uTimes, elapsed, delta);
-    drawEffect(gl, effectLib.sceneBg);
-    unuseEffect(gl, effectLib.sceneBg);
+    activateEffect(gl, effectLib.sceneBg!, null);
+    gl.uniform2f(effectLib.sceneBg!.program.uniforms.uTimes, elapsed, delta);
+    drawEffect(gl, effectLib.sceneBg!);
+    deactivateEffect(gl, effectLib.sceneBg!);
     gl.enable(gl.DEPTH_TEST);
   };
   
@@ -648,35 +646,35 @@ interface Vector3 {
       }
     };
     bindRT(renderSpec.wHalfRT0!, true);
-    useEffect(gl, effectLib.mkBrightBuf!, renderSpec.mainRT!);
+    activateEffect(gl, effectLib.mkBrightBuf!, renderSpec.mainRT!);
     drawEffect(gl, effectLib.mkBrightBuf!);
-    unuseEffect(gl, effectLib.mkBrightBuf!);
+    deactivateEffect(gl, effectLib.mkBrightBuf!);
     for (let i = 0; i < 2; i++) {
       const p = 1.5 + 1 * i;
       const s = 2.0 + 1 * i;
       bindRT(renderSpec.wHalfRT1!, true);
-      useEffect(gl, effectLib.dirBlur!, renderSpec.wHalfRT0!);
+      activateEffect(gl, effectLib.dirBlur!, renderSpec.wHalfRT0!);
       gl.uniform4f(effectLib.dirBlur!.program.uniforms.uBlurDir, p, 0.0, s, 0.0);
       drawEffect(gl, effectLib.dirBlur!);
-      unuseEffect(gl, effectLib.dirBlur!);
+      deactivateEffect(gl, effectLib.dirBlur!);
       bindRT(renderSpec.wHalfRT0!, true);
-      useEffect(gl, effectLib.dirBlur!, renderSpec.wHalfRT1!);
+      activateEffect(gl, effectLib.dirBlur!, renderSpec.wHalfRT1!);
       gl.uniform4f(effectLib.dirBlur!.program.uniforms.uBlurDir, 0.0, p, 0.0, s);
       drawEffect(gl, effectLib.dirBlur!);
-      unuseEffect(gl, effectLib.dirBlur!);
+      deactivateEffect(gl, effectLib.dirBlur!);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, renderSpec.width, renderSpec.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    useEffect(gl, effectLib.finalComp!, renderSpec.mainRT!);
+    activateEffect(gl, effectLib.finalComp!, renderSpec.mainRT!);
     gl.uniform1i(effectLib.finalComp!.program.uniforms.uBloom, 1);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, renderSpec.wHalfRT0!.texture);
     drawEffect(gl, effectLib.finalComp!);
-    unuseEffect(gl, effectLib.finalComp!);
+    deactivateEffect(gl, effectLib.finalComp!);
     gl.enable(gl.DEPTH_TEST);
   };
-  
+
   const createScene = (
     gl: WebGLRenderingContext,
     cmnvtxsrc: string,
@@ -700,16 +698,16 @@ interface Vector3 {
       return;
     }
   
-    sceneStandBy = true;
+   
   };
   
-  const initScene = (gl: WebGLRenderingContext): void => {
-    initPointFlowers();
-    camera.position.z = pointFlower.area!.z + projection.nearfar[0];
-    projection.angle =
-      (Math.atan2(pointFlower.area!.y, camera.position.z + pointFlower.area!.z) * 180.0 * 2.0) / Math.PI;
-    Matrix44.loadProjection(projection.matrix, renderSpec.aspect, projection.angle, projection.nearfar[0], projection.nearfar[1]);
-  };
+    const initScene = (): void => {
+      initPointFlowers();
+      camera.position.z = pointFlower.area!.z + projection.nearfar[0];
+      projection.angle =
+        (Math.atan2(pointFlower.area!.y, camera.position.z + pointFlower.area!.z) * 180.0 * 2.0) / Math.PI;
+      Matrix44.loadProjection(projection.matrix, renderSpec.aspect, projection.angle, projection.nearfar[0], projection.nearfar[1]);
+    };
   
   const renderScene = (gl: WebGLRenderingContext, elapsed: number, delta: number): void => {
     Matrix44.loadLookAt(camera.matrix, camera.position, camera.lookat, camera.up);
@@ -730,7 +728,7 @@ interface Vector3 {
     const rtfunc = (rtname: keyof RenderSpec, rtw: number, rth: number): void => {
       const rt = renderSpec[rtname] as RenderTarget | undefined;
       if (rt) deleteRenderTarget(gl, rt);
-      renderSpec[rtname] = createRenderTarget(gl, rtw, rth) as any;
+      renderSpec[rtname] = createRenderTarget(gl, rtw, rth) as RenderTarget;
     };
     rtfunc('mainRT', renderSpec.width, renderSpec.height);
     rtfunc('wFullRT0', renderSpec.width, renderSpec.height);
@@ -775,7 +773,7 @@ interface Vector3 {
     makeCanvasFullScreen(canvas);
     setViewports(gl, canvas);
     createScene(gl, cmnvtxsrc, bgFsh, brightbufFsh, dirblurFsh, finalVsh, finalFsh, vtxsrc, frgsrc);
-    initScene(gl);
+    initScene();
     timeInfo.start = new Date().getTime();
     timeInfo.prev = timeInfo.start;
     step();

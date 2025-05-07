@@ -17,9 +17,6 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleBuyMeACoffee = () => {
-    window.open("/donate", "_self");
-  };
 
   return (
     <div>
