@@ -77,7 +77,6 @@ interface Vector3 {
   // Time Info
   const timeInfo = { start: 0, prev: 0, delta: 0, elapsed: 0 };
   
-  // Render Specification
   interface RenderSpec {
     width: number;
     height: number;
@@ -87,14 +86,10 @@ interface Vector3 {
     halfHeight: number;
     halfArray: Float32Array;
     pointSize?: { min: number; max: number };
-    mainRT?: RenderTarget;
-    wFullRT0?: RenderTarget;
-    wFullRT1?: RenderTarget;
-    wHalfRT0?: RenderTarget;
-    wHalfRT1?: RenderTarget;
+    renderTargets: { [key: string]: RenderTarget | undefined };
     setSize: (w: number, h: number) => void;
-    [key: string]: RenderTarget | undefined | ((w: number, h: number) => void); // Allow dynamic RenderTarget properties
   }
+  
   const renderSpec: RenderSpec = {
     width: 0,
     height: 0,
@@ -103,6 +98,13 @@ interface Vector3 {
     halfWidth: 0,
     halfHeight: 0,
     halfArray: new Float32Array(3),
+    renderTargets: {
+      mainRT: undefined,
+      wFullRT0: undefined,
+      wFullRT1: undefined,
+      wHalfRT0: undefined,
+      wHalfRT1: undefined,
+    },
     setSize: function (w: number, h: number) {
       this.width = w;
       this.height = h;
@@ -152,11 +154,11 @@ interface Vector3 {
   }
   
   interface PointFlower {
-    program?: ShaderProgram;
+    program?: ShaderProgram | null; // Allow null in addition to undefined
     offset?: Float32Array;
     fader?: Vector3;
     numFlowers?: number;
-    particles?: IBlossomParticle[]; // Changed from BlossomParticle
+    particles?: IBlossomParticle[];
     dataArray?: Float32Array;
     positionArrayOffset?: number;
     eulerArrayOffset?: number;
@@ -217,17 +219,17 @@ interface Vector3 {
     frgsrc: string,
     uniformlist: string[] | null,
     attrlist: string[] | null
-  ): ShaderProgram | null => {
+  ): ShaderProgram | undefined => {
     const vsh = compileShader(gl, gl.VERTEX_SHADER, vtxsrc);
     if (!vsh) {
       console.error('Vertex shader compilation failed');
-      return null;
+      return undefined; // Changed from null
     }
   
     const fsh = compileShader(gl, gl.FRAGMENT_SHADER, frgsrc);
     if (!fsh) {
       console.error('Fragment shader compilation failed');
-      return null;
+      return undefined; // Changed from null
     }
   
     const prog = gl.createProgram()!;
@@ -241,7 +243,7 @@ interface Vector3 {
       const errlog = gl.getProgramInfoLog(prog);
       console.error('Shader program linking failed:', errlog);
       gl.deleteProgram(prog);
-      return null;
+      return undefined; // Changed from null
     }
   
     const shaderProgram: ShaderProgram = {
@@ -355,13 +357,14 @@ interface Vector3 {
     const prm = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) as [number, number];
     renderSpec.pointSize = { min: prm[0], max: prm[1] };
   
-    pointFlower.program = createShader(
+    const shader = createShader(
       gl,
       vtxsrc,
       frgsrc,
       ['uProjection', 'uModelview', 'uResolution', 'uOffset', 'uDOF', 'uFade'],
       ['aPosition', 'aEuler', 'aMisc']
     );
+    pointFlower.program = shader ?? undefined; // Convert null to undefined
   
     if (!pointFlower.program) {
       console.error('Failed to create point flower shader program. Aborting.');
@@ -538,10 +541,10 @@ interface Vector3 {
   }
   
   const effectLib: {
-    sceneBg?: Effect;
-    mkBrightBuf?: Effect;
-    dirBlur?: Effect;
-    finalComp?: Effect;
+    sceneBg?: Effect | null; // Allow null
+    mkBrightBuf?: Effect | null;
+    dirBlur?: Effect | null;
+    finalComp?: Effect | null;
   } = {};
   
   const createEffectProgram = (
@@ -550,15 +553,14 @@ interface Vector3 {
     frgsrc: string,
     exunifs: string[] | null,
     exattrs: string[] | null
-  ): Effect | null => {
+  ): Effect | undefined => {
     const unifs = ['uResolution', 'uSrc', 'uDelta'].concat(exunifs || []);
     const attrs = ['aPosition'].concat(exattrs || []);
     const program = createShader(gl, vtxsrc, frgsrc, unifs, attrs);
     if (!program) {
       console.error('Failed to create effect shader program');
-      return null;
+      return undefined; // Changed from null
     }
-  
     const ret: Effect = {
       program,
       dataArray: new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]),
@@ -602,25 +604,25 @@ interface Vector3 {
     finalVsh: string,
     finalFsh: string
   ): void => {
-    effectLib.sceneBg = createEffectProgram(gl, cmnvtxsrc, bgFsh, ['uTimes'], null);
+    effectLib.sceneBg = createEffectProgram(gl, cmnvtxsrc, bgFsh, ['uTimes'], null) ?? undefined;
     if (!effectLib.sceneBg) {
       console.error('Failed to create sceneBg effect');
       return;
     }
   
-    effectLib.mkBrightBuf = createEffectProgram(gl, cmnvtxsrc, brightbufFsh, null, null);
+    effectLib.mkBrightBuf = createEffectProgram(gl, cmnvtxsrc, brightbufFsh, null, null) ?? undefined;
     if (!effectLib.mkBrightBuf) {
       console.error('Failed to create mkBrightBuf effect');
       return;
     }
   
-    effectLib.dirBlur = createEffectProgram(gl, cmnvtxsrc, dirblurFsh, ['uBlurDir'], null);
+    effectLib.dirBlur = createEffectProgram(gl, cmnvtxsrc, dirblurFsh, ['uBlurDir'], null) ?? undefined;
     if (!effectLib.dirBlur) {
       console.error('Failed to create dirBlur effect');
       return;
     }
   
-    effectLib.finalComp = createEffectProgram(gl, finalVsh, finalFsh, ['uBloom'], null);
+    effectLib.finalComp = createEffectProgram(gl, finalVsh, finalFsh, ['uBloom'], null) ?? undefined;
     if (!effectLib.finalComp) {
       console.error('Failed to create finalComp effect');
       return;
@@ -645,20 +647,20 @@ interface Vector3 {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
       }
     };
-    bindRT(renderSpec.wHalfRT0!, true);
-    activateEffect(gl, effectLib.mkBrightBuf!, renderSpec.mainRT!);
+    bindRT(renderSpec.renderTargets.wHalfRT0!, true);
+    activateEffect(gl, effectLib.mkBrightBuf!, renderSpec.renderTargets.mainRT!);
     drawEffect(gl, effectLib.mkBrightBuf!);
     deactivateEffect(gl, effectLib.mkBrightBuf!);
     for (let i = 0; i < 2; i++) {
       const p = 1.5 + 1 * i;
       const s = 2.0 + 1 * i;
-      bindRT(renderSpec.wHalfRT1!, true);
-      activateEffect(gl, effectLib.dirBlur!, renderSpec.wHalfRT0!);
+      bindRT(renderSpec.renderTargets.wHalfRT1!, true);
+      activateEffect(gl, effectLib.dirBlur!, renderSpec.renderTargets.wHalfRT0!);
       gl.uniform4f(effectLib.dirBlur!.program.uniforms.uBlurDir, p, 0.0, s, 0.0);
       drawEffect(gl, effectLib.dirBlur!);
       deactivateEffect(gl, effectLib.dirBlur!);
-      bindRT(renderSpec.wHalfRT0!, true);
-      activateEffect(gl, effectLib.dirBlur!, renderSpec.wHalfRT1!);
+      bindRT(renderSpec.renderTargets.wHalfRT0!, true);
+      activateEffect(gl, effectLib.dirBlur!, renderSpec.renderTargets.wHalfRT1!);
       gl.uniform4f(effectLib.dirBlur!.program.uniforms.uBlurDir, 0.0, p, 0.0, s);
       drawEffect(gl, effectLib.dirBlur!);
       deactivateEffect(gl, effectLib.dirBlur!);
@@ -666,10 +668,10 @@ interface Vector3 {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, renderSpec.width, renderSpec.height);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    activateEffect(gl, effectLib.finalComp!, renderSpec.mainRT!);
+    activateEffect(gl, effectLib.finalComp!, renderSpec.renderTargets.mainRT!);
     gl.uniform1i(effectLib.finalComp!.program.uniforms.uBloom, 1);
     gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, renderSpec.wHalfRT0!.texture);
+    gl.bindTexture(gl.TEXTURE_2D, renderSpec.renderTargets.wHalfRT0!.texture);
     drawEffect(gl, effectLib.finalComp!);
     deactivateEffect(gl, effectLib.finalComp!);
     gl.enable(gl.DEPTH_TEST);
@@ -712,8 +714,8 @@ interface Vector3 {
   const renderScene = (gl: WebGLRenderingContext, elapsed: number, delta: number): void => {
     Matrix44.loadLookAt(camera.matrix, camera.position, camera.lookat, camera.up);
     gl.enable(gl.DEPTH_TEST);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, renderSpec.mainRT!.frameBuffer);
-    gl.viewport(0, 0, renderSpec.mainRT!.width, renderSpec.mainRT!.height);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, renderSpec.renderTargets.mainRT!.frameBuffer);
+    gl.viewport(0, 0, renderSpec.renderTargets.mainRT!.width, renderSpec.renderTargets.mainRT!.height);
     gl.clearColor(0.005, 0, 0.05, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     renderBackground(gl, elapsed, delta);
@@ -725,10 +727,10 @@ interface Vector3 {
     renderSpec.setSize(canvas.width, canvas.height);
     gl.clearColor(0.2, 0.2, 0.5, 1.0);
     gl.viewport(0, 0, renderSpec.width, renderSpec.height);
-    const rtfunc = (rtname: keyof RenderSpec, rtw: number, rth: number): void => {
-      const rt = renderSpec[rtname] as RenderTarget | undefined;
+    const rtfunc = (rtname: string, rtw: number, rth: number): void => {
+      const rt = renderSpec.renderTargets[rtname];
       if (rt) deleteRenderTarget(gl, rt);
-      renderSpec[rtname] = createRenderTarget(gl, rtw, rth) as RenderTarget;
+      renderSpec.renderTargets[rtname] = createRenderTarget(gl, rtw, rth);
     };
     rtfunc('mainRT', renderSpec.width, renderSpec.height);
     rtfunc('wFullRT0', renderSpec.width, renderSpec.height);
@@ -736,7 +738,7 @@ interface Vector3 {
     rtfunc('wHalfRT0', renderSpec.halfWidth, renderSpec.halfHeight);
     rtfunc('wHalfRT1', renderSpec.halfWidth, renderSpec.halfHeight);
   };
-  
+
   const makeCanvasFullScreen = (canvas: HTMLCanvasElement): void => {
     const b = document.body;
     const d = document.documentElement;
