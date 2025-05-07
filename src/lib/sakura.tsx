@@ -302,7 +302,7 @@ interface Vector3 {
   
   // Blossom Particle
   const pointFlower: PointFlower = {};
-  let sceneStandBy = false;
+
   
   class BlossomParticle implements IBlossomParticle {
     velocity: number[] = new Array(3);
