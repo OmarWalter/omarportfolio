@@ -40,7 +40,7 @@ export function Dock() {
       icon: (
         <IconBrandTelegram className="h-full w-full text-neutral-500 dark:text-neutral-300" />
       ),
-      href: "https://t.me/@OmarWdev",
+      href: "https://t.me/@OmarWaldev",
     },
     {
       title: "GitHub",
