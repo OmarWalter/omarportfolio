@@ -47,7 +47,7 @@ export function Dock() {
       icon: (
         <IconBrandGithub className="h-full w-full text-neutral-500 dark:text-neutral-300" />
       ),
-      href: "https://github.com/sunlightluck",
+      href: "https://github.com/OmarWalter",
     },
   ];
 
